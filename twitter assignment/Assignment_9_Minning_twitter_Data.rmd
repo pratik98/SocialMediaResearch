@@ -1,0 +1,186 @@
+﻿---
+title: "Assignment 9 - Twitter"
+author: "Pratik Agrawal (804861)"
+date: "10/01/2020"
+output:
+  pdf_document: default
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ 
+##Setup
+
+```{r cars}
+# Install Packages
+install.packages("rtweet")
+install.packages("ggmap")
+install.packages("igraph")
+install.packages("ggraph")
+install.packages("tidytext")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("readr")
+library(ggpubr) 
+library(tidyverse)
+
+```
+
+
+```{r}
+# Open Libraries
+library(rtweet)
+
+# Speficy Authentification Token's provided in your Twitter App
+create_token(
+  app = "Sentiment_ndtv",
+  consumer_key = "",
+  consumer_secret = "",
+  access_token = "",
+  access_secret = ""
+ 
+)
+
+```
+
+## Task 1
+
+## 1.	What is the main research question? Briefly explain the essence of the paper in 1-3 sentences.
+
+## The main research question the paper is how do one automatically quntify and scale the customer needs for innovtion and business growth?
+## The paper suggests one approch to answer above question using machine learning techniques and social media data. The authors suggest techniques such as surveys, interviews etc are not automated and not scalable enough to extract insights about customer needs. They also demostrate the approch using e-mobility twitter data.
+
+## 2.	Replicate the search performed by the authors on page 8 (section “Data Acquisition & Labeling”). I.e., using the Twitter API, collect every instance (tweet), excluding retweets, which contains at least one item of a predefined keyword list: 
+## •	e-tankstelle, eauto, elektroauto, elektrofahrzeug, elektromobilitaet, elektromobilität, ladesaeule, ladesäule
+## •	ecar, electric mobility, EV vehicle, e-mobility, emobility
+## •	bmw i3, egolf, eup, fortwo electric drive, miev, nissan leaf, opel ampera, peugeot ion, renault zoe, tesla model s
+
+
+```{r}
+list_of_tweets <- search_tweets2(
+  c("e-tankstelle OR eauto OR elektroauto OR elektrofahrzeug OR elektromobilitaet OR elektromobilität OR ladesaeule OR ladesäule",
+    "ecar OR \"electric mobility\" OR  \"EV vehicle\" OR e-mobility OR emobility",
+    " \"bmw i3\" OR  egolf OR eup OR \"for two electric drive\" OR miev OR  \"nissan leaf\" OR  \"opel ampera\" OR  \"peugeot ion\" OR \"renault zoe \" OR \"tesla model s\" "),
+  type = "recent", include_rts = FALSE,
+geocode = NULL, max_id = NULL, parse = TRUE, token = NULL,
+retryonratelimit = TRUE, verbose = TRUE
+)
+
+dim(list_of_tweets)
+
+
+```
+```{r}
+tail(list_of_tweets)
+#write_as_csv(list_of_tweets, "EV.csv", prepend_ids = TRUE, na = "", fileEncoding = "UTF-8")
+```
+
+## 3.	Reflect on the search query. If you were to conduct similar research now, can the keyword list be extended? If so, what words would you add? 
+
+## Yes, The keyword list can surely be extended. I would add other car companies in the list which are working on their own versions of electric cars. for example, Diamler and other US companies.
+
+## 4.	Based on the language information of Twitter, filter for tweets by language by creating three subsamples: German, English, and other-language tweets. How many cases are there in each subsample? Save the subsamples as a comma-separated value file.
+
+## German
+```{r}
+list_of_tweets_de <- search_tweets2(
+  c("e-tankstelle OR eauto OR elektroauto OR elektrofahrzeug OR elektromobilitaet OR elektromobilität OR ladesaeule OR ladesäule","ecar OR \"electric mobility\" OR  \"EV vehicle\" OR e-mobility OR emobility","\"bmw i3\" OR  egolf OR eup OR \"fortwo electric drive\" OR miev OR  \"nissan leaf\" OR  \"opel ampera\" OR  \"peugeot ion\" OR \"renault zoe \" OR \"tesla model s\" "),
+  type = "recent", include_rts = FALSE,
+geocode = NULL, max_id = NULL, parse = TRUE, token = NULL,
+retryonratelimit = TRUE, verbose = TRUE,  lang = "de"
+)
+
+dim(list_of_tweets_de)
+```
+
+```{r}
+tail(list_of_tweets_de)
+#write_as_csv(list_of_tweets_de, "EV_DE.csv", prepend_ids = TRUE, na = "", fileEncoding = "UTF-8")
+#list_of_tweets_de$query
+```
+## French
+```{r}
+list_of_tweets_fr <- search_tweets2(
+  c("e-tankstelle OR eauto OR elektroauto OR elektrofahrzeug OR elektromobilitaet OR elektromobilität OR ladesaeule OR ladesäule","ecar OR \"electric mobility\" OR  \"EV vehicle\" OR e-mobility OR emobility","\"bmw i3\" OR  egolf OR eup OR \"fortwo electric drive\" OR miev OR  \"nissan leaf\" OR  \"opel ampera\" OR  \"peugeot ion\" OR \"renault zoe \" OR \"tesla model s\" "),
+  type = "recent", include_rts = FALSE,
+geocode = NULL, max_id = NULL, parse = TRUE, token = NULL,
+retryonratelimit = TRUE, verbose = TRUE,  lang = "fr"
+)
+
+dim(list_of_tweets_fr)
+```
+```{r}
+tail(list_of_tweets_fr)
+#write_as_csv(list_of_tweets_fr, "EV_fr.csv", prepend_ids = TRUE, na = "", fileEncoding = "UTF-8")
+```
+
+## 5.	Look at the results (check the first ten rows of the English subsample). Do you note any issues with your data? What clean-up steps associated with social media data would you recommend?
+## Tweets can ve cleaned by,
+## 1. Removing usernames i.e. @usernames
+## 2. Removing Special Characters i.e. Emojis
+## 3. Removing URLs
+
+## Task 2
+## Find the 1000 most recent tweets by Katy Perry (https://twitter.com/katyperry), Kim Kardashian West (https://twitter.com/KimKardashian), and Ariana Grande (https://twitter.com/ArianaGrande). Save the sample as a comma-separated value file.
+## Explore the ts_plot() function in the rtweet package (page 73 in the documentation). It automates some standard time-series visualization methods; for example, it allows us to visualize the frequency of tweets quickly.
+
+
+```{r}
+## compare account activity 
+tmls <- get_timeline(
+c("KimKardashian", "katyperry","ArianaGrande"),
+n = 1000
+)
+
+```
+
+```{r}
+head(tmls)
+#save the Tweets in CSV file
+#write_as_csv(tmls, "celebs.csv", prepend_ids = TRUE, na = "", fileEncoding = "UTF-8")
+```
+
+## Visualize the tweet frequency of the above celebrities by week. Who posts most often? Who posts least often?
+```{r}
+## group by screen name and plot each time series
+ts_plot(dplyr::group_by(tmls, screen_name), "weeks")
+
+```
+## Kim Kardashian Posts more often , Katy Perry Posts less often.
+
+## Task 3
+
+## Consider three important German (or a country of your origin) political figures of your choice. Briefly reason your choice (1-2 sentences).  Similar to exercise 2, find 2000 most recent tweets by these three prominent political figures of your choice. Save the sample as a comma-separated value file.
+
+## I am exploring Tweets from Indian Politicians.
+## Narendra Modi is a prime minister of india, Rahul Gandhi and Arvind Kejriwal are most popular opposition leaders. 
+## Narendra Modi has 52.5 Million followers in twitter, which is more than half of total population of germany.
+## other two leaders have combined more than 28 Million twitter followers.
+```{r}
+# NAMO: 52.5 Mil, RAGA: 11.8 MIL, KEjri:16.3
+## compare account activity 
+tmls_politics <- get_timeline(
+c("narendramodi", "RahulGandhi","ArvindKejriwal"),
+n = 3000
+)
+dim(tmls_politics)
+```
+
+```{r}
+head(tmls_politics)
+#save the Tweets in CSV file
+#write_as_csv(tmls_politics, "Politicians.csv", prepend_ids = TRUE, na = "", fileEncoding = "UTF-8")
+```
+## Compare the account activity for these politicians (i.e., visualize the frequency of tweets). Who posts most often? Who posts least often?
+```{r}
+## group by screen name and plot each time series
+ts_plot(dplyr::group_by(tmls_politics, screen_name), "weeks")
+```
+## Narendra Modi posts more often, Rahul Gandhi posts less often.
+
+ 
