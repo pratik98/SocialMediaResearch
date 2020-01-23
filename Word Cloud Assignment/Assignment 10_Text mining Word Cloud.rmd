@@ -1,0 +1,502 @@
+﻿---
+title: "Assignment 10-Data Mining and Word Clouds"
+author: "Pratik Agrawal_804861"
+date: "21 Januar 2020"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Set up
+```{r}
+#install.packages("webshot")
+```
+
+```{r cars}
+#install necessary packages, see txt file
+if(FALSE){
+  install.packages("rtweet")# access tweets
+
+install.packages("tm") # text mining
+install.packages("tidytext")  # text mining
+
+install.packages("magrittr") # provides the pipe %>% operator
+
+install.packages("tidyverse")# collection of packages for data analysis (ggplot2, dplyr, tidyr, readr, purrr, tibble, stringr, forcats)
+
+install.packages("ggplot2") # visualization
+install.packages("stringr") # working with strings
+install.packages("lubridate") # working with dates
+
+install.packages("wordcloud") # word-cloud generator 
+install.packages("wordcloud2") # slightly different design and fun applications
+install.packages("RColorBrewer") # package for the colours
+install.packages("hunspell")
+install.packages("SnowballC")}
+library(tidyverse)
+library(tidytext)
+library(stringr) #manipulating text data
+library(wordcloud2) #create wordclouds
+
+```
+
+
+# Accessing tweets
+```{r}
+#access 1000 tweets with the hashtag #LibyaConference OR #LibyenKonferenz, do not include retweets, language is english 
+library(rtweet)
+# Speficy Authentification Token's provided in your Twitter App
+create_token(
+  app = "Sentiment_ndtv",
+  consumer_key = "",
+  consumer_secret = "",
+  access_token = "",
+  access_secret = ""
+ 
+)
+```
+# Exercise 1
+### Select a tweeter user of your interest. Briefly (1-2 sentences) reason your choice in comment of the code.
+###  “For this Assignment I have chosen Narendra Modi's account @Narendramodi because he is one of the most popular Politicians of india and he is also extremly active on twitter”.  
+
+### a)	Scrape 1000 tweets of this user. Present them as a dataframe in R and show the first 6 rows of this dataset.  
+
+```{r}
+tmls_politics <- get_timeline("narendramodi",n = 1000)
+head(tmls_politics)
+```
+
+```{r}
+dim(tmls_politics)
+```
+
+### b)	How many “likes“ and “retweets” average post from this user becomes? Print out top 5 most “liked” posts. 
+```{r}
+cols <- c("favorite_count","retweet_count")
+summary(tmls_politics[cols])
+```
+### on average a tweet gets ~22k  likes and  ~4k retweets from Modi.
+
+```{r}
+# order the tweets by favorite_count variable in descending order and print top 5
+cols <- c("favorite_count","text")
+df <- tmls_politics[order(-tmls_politics$favorite_count),cols]
+head(df,5)
+```
+
+### c)	Return 10 most often referenced accounts within your sample of tweets. Referenced accounts can be recognized by @useraccount. Example from Obama tweets:  Thank you for your leadership @RepHalRogers. This epidemic doesn't discriminate between red or blue, so it's up to all of us to do our part. Plot the frequency of 10 most often referenced accounts.
+```{r}
+# first remove all NA values from the mentions column,
+df <- tmls_politics[!is.na(tmls_politics$mentions_screen_name),]
+head(df$mentions_screen_name)
+```
+```{r}
+## now since the mentions are List, we need to unnest these mentiones into seperate rows 
+library(dplyr)
+library(tidyr)
+df <- df %>%
+   unnest(mentions_screen_name) 
+  head(df$mentions_screen_name)
+```
+
+```{r}
+## now group by the mentions_screen_name, sort and display top 10 mentioned user names
+ df2 <- df %>% group_by(mentions_screen_name) %>%  tally(sort = TRUE) %>% top_n(10)
+head(df2,10)
+```
+```{r}
+#Plot
+library(ggplot2)
+df2   %>% 
+  mutate(word = reorder(mentions_screen_name, n)) %>%
+  top_n(10) %>%
+  ggplot(aes(x = word, y = n)) +
+  
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+  labs(y = "Count",
+       x = "mentions_screen_name",
+       title = "Count of top 10 Handles mentioned by Modi",
+       subtitle = "Last 1000 Tweets")
+```
+
+### d)	When were the extracted tweets reported? Plot a histogram of tweet counts with time on x-axis. Hint: ymd_hms() function may be useful. It transforms dates stored as character vectors in year, month, day, hour, minute, second format to POSIXct objects
+### e)	What devices/services (e.g., Web, Android, Iphone) were used to post tweets? Plot histogram by source (=device/service). 
+
+### I have combined subtask D & E in Single histogram, I have plotted Histogram by hour and filled it with the source of tweets.
+```{r}
+#Extract date out of timestamp
+#install.packages("lubridate")
+#library(lubridate)
+df3 <- tmls_politics %>% mutate(created_at_date =as.Date(tmls_politics$created_at))
+head(df3)
+
+```
+```{r}
+library(lubridate) #manipulate dates
+library(scales) #for plotting
+#tweet time
+tweets_hour <-  tmls_politics %>%
+  count(source, hour = hour(with_tz(created_at, "Asia/Kolkata"))) %>% #count tweets per hour
+  mutate(percent = n / sum(n)) #reformat to percent
+  
+  
+ggplot(data=tweets_hour,aes(hour, fill = source)) + #create plot
+  geom_histogram(binwidth=.5) + #add a line graph
+  #scale_y_continuous(labels = percent_format()) + #format axes
+  labs(x = "Hour of day (IST)", #label axes
+       y = "Avg. Number of tweets per hour",
+       color = "")
+```
+
+#### Most tweets are from Iphone followed bt Twitter Media Studio.
+
+```{r}
+## Just for fun, i plot the bar chart of distribution of different sources below.
+df_source <- tmls_politics %>%group_by(source) %>% summarise(N = n()) %>% arrange(source)
+barplot((df_source$N/sum(df_source$N))*100, main="Source Share Distribution", xlab="Percentage by medium",names.arg=df_source$source,ylim = c(0,100) )
+
+```
+
+### f)	Inspect the content of your sample of tweets. Do necessary text transformations and clean the text as if you want to present the 1000 tweets as a word cloud. Explore the standard set of English/German stopwords, e.g. here https://github.com/arc12/Text-Mining-Weak-Signals/wiki/Standard-set-of-english-stopwords and add at least 2 more stopwords that have in your opinion little value for your sample. Consider the language of the tweets when choosing between English/German stopwords set. 
+
+```{r}
+tweets <- tmls_politics
+
+#removing http and https
+tweets$text<-gsub("http.*","", tweets$text)
+tweets$text<-gsub("https.*","", tweets$text)
+# remove punctuation, convert to lowercase, add id for each tweet!
+tweets_clean <- tweets%>%
+dplyr::select(text) %>%
+unnest_tokens(word, text)
+head(tweets_clean)
+```
+
+### Stemming 
+```{r}
+#stemming is not always recommended with unnest_tokens()
+#Option 1 wordStem() function
+library(SnowballC)
+tweets_clean1 <- tweets %>%
+  dplyr::select(text) %>%
+  unnest_tokens(word, text)%>%
+  mutate(word_stem = wordStem(word))
+head(tweets_clean1)
+```
+
+### here is a plot of most frequent words without removing the stopwords. we see lot of hindi and english stopwords.
+```{r}
+# plot the top 20 
+library (dplyr)
+tweets_clean1 %>%
+  count(word, sort = TRUE) %>% #Term document matrix
+  top_n(20) %>%
+  mutate(word = reorder(word, n)) %>%
+  
+  ggplot(aes(x = word, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+  labs(x = "Count",
+       y = "Unique words",
+       title = "Count of unique words found in tweets_clean")
+```
+
+```{r}
+
+stop_words_en <-get_stopwords()
+stop_words_hindi <- get_stopwords(language = "hi",source = "stopwords-iso")
+stop_words <- rbind.data.frame(stop_words_en,stop_words_hindi)
+head(stop_words)
+```
+
+### load list of stop words & combine the stop words from english and hindi, since tweets contain both languages
+
+```{r}
+# remove stop words from your list of words
+tweets_words <- tweets_clean1%>%
+anti_join(stop_words)
+head(tweets_words,25)
+```
+### g)	Generate a term-document matrix and print out 10 most frequently used words as a table.
+```{r}
+tweets_words %>%
+  count(word, sort = TRUE) %>%
+  top_n(10) %>%
+  mutate(word = reorder(word, n))
+```
+
+### h)	Create a bar plot for the 10 most frequently used words. 
+
+```{r}
+tweets_words %>%
+  count(word, sort = TRUE) %>%
+  top_n(10) %>%
+  mutate(word = reorder(word, n)) %>%
+  
+  ggplot(aes(x = word, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+  labs(y = "Count",
+       x = "Unique words",
+       title = "Count of top 10 unique words found in tweets",
+       subtitle = "Stop words removed from the list")
+```
+
+
+### Word Cloud (Solution for f)
+
+```{r}
+#create Term document matrix
+library(tidyverse)
+  words_wc <- tweets_words %>%
+  count(word, sort = TRUE) %>%
+   
+  mutate(word = reorder(word, n)) 
+
+library(wordcloud)
+library(RColorBrewer)
+set.seed(1234) # for reproducibility 
+
+wordcloud(words = words_wc$word, freq = words_wc$n, min.freq = 15, max.words=200, random.order=FALSE, rot.per=0.35,colors=brewer.pal(8, "Dark2"))
+```
+
+### i)	Generate the word cloud so that maximum number of words to be plotted is 20 and minimum frequency of the plotted word is 2. Print out 1 word cloud in the color palette of your choice and 1 word cloud in black-and-white colors. 
+```{r}
+wordcloud(words = words_wc$word, freq = words_wc$n, min.freq = 2, max.words=20, random.order=FALSE, rot.per=0.35,colors=brewer.pal(8, "Dark2"))
+```
+
+
+```{r}
+
+library(wordcloud2)
+#top 20 words
+wordcloud2(data=words_wc %>% top_n(20), size = 0.9, color = c("black","white"),backgroundColor = "skyblue")
+```
+
+## Exercise 2 
+
+### a)	Select a tweeter user, somehow related to a twitter user of your interest in Task 1. It may be a friend, business partner, rival / competitor, advisor or any other person from a similar field. E.g. Cristiano Ronaldo and Lionel Messi, Kim Kardashian and Beyoncé. Shortly comment on your choice. Scrape 1000 tweets of this second user.
+
+#### I am selecting "Rahul Gandhi" as second user, he is main opponent of first user, i.e. Narendra Modi.
+
+```{r}
+tweets_rg <- get_timeline("RahulGandhi",n = 1000)
+head(tweets_rg)
+```
+### b)	Inspect the content, do necessary text transformations and clean the text using the standard set of English (German) stopwords thus preparing to present word clouds for both speeches. Print out the word cloud for the tweets of the 1st user in red colors and the word cloud for the 2nd user in blue colors, set maximum number of words to be plotted and minimum frequency by yourself. Shortly #comment on your choices.
+
+#### Preproccessing 
+```{r}
+#removing http and https
+tweets_rg$text<-gsub("http.*","", tweets_rg$text)
+tweets_rg$text<-gsub("https.*","", tweets_rg$text)
+
+## Stemming
+tweets_clean_rg1 <- tweets_rg %>%
+  dplyr::select(text) %>%
+  unnest_tokens(word, text)%>%
+  mutate(word_stem = wordStem(word))
+tail(tweets_clean_rg1)
+```
+
+```{r}
+# remove stop words from your list of words
+tweets_words_rg <- tweets_clean_rg1%>%
+anti_join(stop_words)
+```
+
+##### Plot Wordclouds for both users
+### Narendra Modi
+```{r}
+wordcloud(words = words_wc$word, freq = words_wc$n, min.freq = 20, max.words=100, random.order=FALSE, rot.per=0.35,colors=c("red"))
+
+```
+
+### Rahul Gandhi
+```{r}
+#create Term document matrix
+library(tidyverse)
+  words_wc_rg <- tweets_words_rg %>%
+  count(word, sort = TRUE) %>%
+   
+  mutate(word = reorder(word, n)) 
+wordcloud(words = words_wc_rg$word, freq = words_wc$n, min.freq =20, max.words=100, random.order=FALSE,colors=c("blue"))
+
+library(wordcloud)
+library(RColorBrewer)
+set.seed(1234) # for reproducibility 
+
+```
+
+```{r}
+#Create two panels to add the word clouds to
+par(mfrow=c(1,2))
+wordcloud(words = words_wc$word, freq = words_wc$n, min.freq = 10, max.words=50, random.order=FALSE,  scale=c(3, .5),colors=c("red"))
+wordcloud(words = words_wc_rg$word, freq = words_wc$n, min.freq = 8, max.words=50, random.order=FALSE, scale=c(3, .4),colors=c("blue"))
+```
+
+### c)	Generate a term-document matrix for the tweets of each user and print out 6 most frequently used words for the tweets of each user. 
+```{r}
+#create Term document matrix - Rahul Gandhi
+  words_wc_rg <- tweets_words_rg %>%
+  count(word, sort = TRUE) %>%
+  mutate(word = reorder(word, n)) 
+head(words_wc_rg)
+```
+```{r}
+#create Term document matrix - Narendra Modi
+  words_wc <- tweets_words %>%
+  count(word, sort = TRUE) %>%
+  mutate(word = reorder(word, n)) 
+head(words_wc)
+```
+
+### d)	Go to https://rpubs.com/brandonkopp/creating-word-clouds-in-r or use any other source to get acquainted with Comparison Cloud. Generate Comparison Cloud using comparison.cloud() function for the tweets of 2 users. Set the argument max.words on your own. Shortly #comment on the output, e.g.: “#From the comparison cloud, we can see that issues like Iraq were more front-and-center in 2008 than in 2016. We also see ISIL, which didn’t exist (at least by that name) in 2008, pop up in President Obama’s speech. “Change” was used more by President Obama and, interestingly, “hope” was used more often in President Bush’s 2008 speech“ 
+
+
+```{r}
+## first we need to create combined term document matrix for both these users 
+words_Modi<- words_wc %>% mutate(Modi = n)
+drops <- c("n")
+words_Modi <- words_Modi[ , !(names(words_Modi) %in% drops)]
+```
+
+```{r}
+head(words_Modi)
+```
+```{r}
+words_Raga<- words_wc_rg %>% mutate(RAGA = n)
+drops <- c("n")
+words_Raga <- words_Raga[ , !(names(words_Raga) %in% drops)]
+head(words_Raga)
+
+```
+```{r}
+#Create single term document matrix
+Words_both <- merge(words_Modi,words_Raga,by = 'word')
+
+tail(Words_both)
+
+```
+
+```{r}
+library(reshape2)
+library(tm)
+library(dplyr)
+library(wordcloud)
+Words_both$word <-as.character(Words_both$word)
+
+df_n <- Words_both %>% gather()
+corpus_my<-Corpus(VectorSource(df_n))
+#tdm<-as.matrix(TermDocumentMatrix(corpus_my))
+df2<-Words_both %>% 
+  gather("Origin","Freq",c(2,3)) %>% 
+  acast(word~Origin,fill=0,value.var = "Freq")
+comparison.cloud(df2, random.order=FALSE, colors = c("indianred3","lightsteelblue3"),
+                 title.size=2.5,max.words=150,scale = c(7,.5))
+```
+
+### we could notice that Being Prime minister, Modi has more often used words like 'India', 'People' etc. compared to Rahul Gandhi. While rahul Gandhi has used words like 'BJP', 'PM', 'Modi', 'Congress' etc as he is in opposition and need to oppose the ruling party on varios issues.
+
+### e) 	Get acquainted with Commonality Cloud. Generate Commonality Cloud for the tweets of 2 users. Shortly comment on the output.
+```{r}
+library(RColorBrewer)
+commonality.cloud(df2, random.order=FALSE, scale=c(5, .5),colors = brewer.pal(4, "Dark2"), max.words=100)
+```
+
+### Both leaders use expected words like 'India', Poeple, indian,nation, names of the both political parties. 
+
+
+## Exercise 3. 
+
+### Create a word cloud of a web page: https://www.uni-potsdam.de/de/social-media-krasnova.html  
+### Do text cleaning, if necessary. Set the color palette, maximum number of words to be plotted and minimum frequency by yourself. Shortly comment on the output. 
+```{r}
+
+## function is taken from here: http://www.sthda.com/english/wiki/print.php?id=159 
+
+rquery.wordcloud <- function(x, type=c("text", "url", "file"), 
+                          lang="de", excludeWords=NULL, 
+                          textStemming=FALSE,  colorPalette="Dark2",
+                          min.freq=3, max.words=200)
+{ 
+  library("tm")
+  library("SnowballC")
+  library("wordcloud")
+  library("RColorBrewer") 
+  
+  if(type[1]=="file") text <- readLines(x)
+  else if(type[1]=="url") text <- html_to_text(x)
+  else if(type[1]=="text") text <- x
+  
+  # Load the text as a corpus
+  docs <- Corpus(VectorSource(text))
+  # Convert the text to lower case
+  docs <- tm_map(docs, content_transformer(tolower))
+  # Remove numbers
+  docs <- tm_map(docs, removeNumbers)
+  # Remove stopwords for the language 
+  docs <- tm_map(docs, removeWords, stopwords(lang))
+  # Remove punctuations
+  docs <- tm_map(docs, removePunctuation)
+  # Eliminate extra white spaces
+  docs <- tm_map(docs, stripWhitespace)
+  # Remove your own stopwords
+  if(!is.null(excludeWords)) 
+    docs <- tm_map(docs, removeWords, excludeWords) 
+  # Text stemming
+  if(textStemming) docs <- tm_map(docs, stemDocument)
+  # Create term-document matrix
+  tdm <- TermDocumentMatrix(docs)
+  m <- as.matrix(tdm)
+  v <- sort(rowSums(m),decreasing=TRUE)
+  d <- data.frame(word = names(v),freq=v)
+  # check the color palette name 
+  if(!colorPalette %in% rownames(brewer.pal.info)) colors = colorPalette
+  else colors = brewer.pal(8, colorPalette) 
+  # Plot the word cloud
+  set.seed(1234)
+  wordcloud(d$word,d$freq, min.freq=min.freq, max.words=max.words,
+            random.order=FALSE, rot.per=0.35, 
+            use.r.layout=FALSE, colors=colors)
+  
+  invisible(list(tdm=tdm, freqTable = d))
+}
+#++++++++++++++++++++++
+# Helper function
+#++++++++++++++++++++++
+# Download and parse webpage
+html_to_text<-function(url){
+  library(RCurl)
+  library(XML)
+  # download html
+  html.doc <- getURL(url)  
+  #convert to plain text
+  doc = htmlParse(html.doc, asText=TRUE)
+ # "//text()" returns all text outside of HTML tags.
+ # We also don’t want text such as style and script codes
+  text <- xpathSApply(doc, "//text()[not(ancestor::script)][not(ancestor::style)][not(ancestor::noscript)][not(ancestor::form)]", xmlValue)
+  # Format text vector into one character string
+  return(paste(text, collapse = " "))
+}
+```
+
+```{r}
+#install.packages(c( "RCurl", "XML"))
+library(RCurl)
+library(XML)
+url = "https://www.uni-potsdam.de/de/social-media-krasnova.html"
+rquery.wordcloud(x=url, type="url", min.freq = 3, max.words = 110)
+```
+
+### as the URL text is in german. we applied stopwords of german. this results in english stopwords like "the" and "and" being included.if we set minimum freq. to 5 & 10, there are very less words in the cloud so i have set the min. freq as 3 to include more words.
